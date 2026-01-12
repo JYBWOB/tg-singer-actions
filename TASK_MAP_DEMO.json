@@ -1,0 +1,25 @@
+{
+    "test_task": {
+        "chats": [
+            {
+                "chat_id": 1234567890,
+                "name": "签到",
+                "delete_after": null,
+                "actions": [
+                    {
+                        "action": 1,
+                        "text": "/start"
+                    },
+                    {
+                        "action": 3,
+                        "text": "签到"
+                    }
+                ],
+                "action_interval": 1.0
+            }
+        ],
+        "sign_at": "30 10 * * *",
+        "random_seconds": 1800,
+        "sign_interval": 1
+    }
+}

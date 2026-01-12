@@ -1,0 +1,27 @@
+on:
+  schedule:
+    - cron: '30 10 * * *'
+  workflow_dispatch:
+jobs:
+  sign-job:
+    name: sign-job-name
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+    - name: install tg-signer
+      run: |
+        pip3 install tg-signer
+    - name: sign
+      env:
+        SESSION_STRING: ${{ secrets.SESSION_STRING }}
+        TASK_MAP: ${{ secrets.TASK_MAP }}
+      run: |
+        echo "$TASK_MAP" | jq -r 'to_entries[] | "\(.key)\t\(.value | tojson)"' | while IFS=$'\t' read -r key value_json; do
+            task_path=".signer/signs/${key}"
+            mkdir -p ${task_path}
+            config_name="${task_path}/config.json"
+            echo "$value_json" | jq . > "$config_name"
+            tg-signer --session-string "$SESSION_STRING" run-once ${key}
+        done
