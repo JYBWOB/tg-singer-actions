@@ -28,8 +28,8 @@ jobs:
             mkdir -p ${task_path}
             config_name="${task_path}/config.json"
             echo "$value_json" | jq . > "$config_name"
-            # 避免隐私信息输出，若想输出日志则删除 `> /dev/null 2>&1`
-            tg-signer --session-string "$SESSION_STRING" run-once ${key} > /dev/null 2>&1
+            # 避免隐私信息输出，若想输出日志则删除 `> /dev/null 2>&1 </dev/null`
+            tg-signer --session-string "$SESSION_STRING" run-once ${key} > /dev/null 2>&1 </dev/null
         done
     - name: 拉取代码
       uses: actions/checkout@v4
