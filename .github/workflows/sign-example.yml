@@ -1,0 +1,32 @@
+name: "签到 - example"
+
+on:
+  schedule:
+    # 每天北京时间 8:00 执行，按需修改
+    - cron: "0 0 * * *"
+      timezone: Asia/Shanghai
+  workflow_dispatch:
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install tg-signer
+        run: pip install tg-signer
+
+      - name: Write sign config
+        run: |
+          mkdir -p .signer/signs/example
+          echo '${{ secrets.SIGN_CONFIG_EXAMPLE }}' > .signer/signs/example/config.json
+
+      - name: Run sign task
+        env:
+          TG_SESSION_STRING: ${{ secrets.TG_SESSION_STRING }}
+        run: tg-signer --session-string "$TG_SESSION_STRING" --in-memory run-once example

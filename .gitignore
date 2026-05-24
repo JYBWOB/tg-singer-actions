@@ -1,0 +1,5 @@
+.signer/
+*.session
+logs/
+__pycache__/
+.env
