@@ -27,18 +27,19 @@ jobs:
       - name: Validate required secrets
         shell: bash
         env:
-          SESSION_STRING: ${{ secrets.TG_SESSION_STRING }}
+          SESSION_STRING: ${{ secrets.TG_SESSION_STRING || secrets.SESSION_STRING }}
           SIGNER_CONFIG: ${{ secrets.TG_SIGNER_CONFIG }}
+          LEGACY_TASK_MAP: ${{ secrets.TASK_MAP }}
         run: |
           if [[ -z "${SESSION_STRING}" ]]; then
-            echo "::error::Missing repository secret: TG_SESSION_STRING"
+            echo "::error::Missing TG_SESSION_STRING (or legacy SESSION_STRING) repository secret"
             exit 1
           fi
-          if [[ -z "${SIGNER_CONFIG}" ]]; then
-            echo "::error::Missing repository secret: TG_SIGNER_CONFIG"
+          if [[ -z "${SIGNER_CONFIG}" && -z "${LEGACY_TASK_MAP}" ]]; then
+            echo "::error::Missing TG_SIGNER_CONFIG (or legacy TASK_MAP) repository secret"
             exit 1
           fi
-          python3 -c 'import json, os; value = json.loads(os.environ["SIGNER_CONFIG"]); assert isinstance(value, dict), "TG_SIGNER_CONFIG must be a JSON object"'
+          python3 -c 'import json, os; raw = os.environ["SIGNER_CONFIG"] or os.environ["LEGACY_TASK_MAP"]; value = json.loads(raw); assert isinstance(value, dict) and value, "configuration must be a non-empty JSON object"'
 
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -55,16 +56,34 @@ jobs:
         shell: bash
         env:
           SIGNER_CONFIG: ${{ secrets.TG_SIGNER_CONFIG }}
+          LEGACY_TASK_MAP: ${{ secrets.TASK_MAP }}
         run: |
           workdir="${RUNNER_TEMP}/tg-signer"
+          tasks_file="${RUNNER_TEMP}/tg-signer-tasks.txt"
           mkdir -p "${workdir}"
-          printf '%s' "${SIGNER_CONFIG}" \
-            | tg-signer --workdir "${workdir}" import github-actions
+
+          if [[ -n "${SIGNER_CONFIG}" ]]; then
+            printf '%s' "${SIGNER_CONFIG}" \
+              | tg-signer --workdir "${workdir}" import github-actions
+            printf '%s\n' 'github-actions' > "${tasks_file}"
+          else
+            echo "Using legacy TASK_MAP; run scripts/setup.sh to migrate to TG_SIGNER_CONFIG."
+            python3 -c 'import base64, json, os; task_map = json.loads(os.environ["LEGACY_TASK_MAP"]); assert isinstance(task_map, dict) and task_map, "TASK_MAP must be a non-empty JSON object"; configs = list(task_map.values()); assert all(isinstance(config, dict) for config in configs), "each TASK_MAP value must be a JSON object"; [print(f"legacy-{index:03d}\t{base64.b64encode(json.dumps(config, ensure_ascii=False, separators=(chr(44), chr(58))).encode()).decode()}") for index, config in enumerate(configs, start=1)]' \
+              > "${RUNNER_TEMP}/legacy-tasks.tsv"
+
+            : > "${tasks_file}"
+            while IFS=$'\t' read -r task_name encoded_config; do
+              printf '%s' "${encoded_config}" \
+                | base64 --decode \
+                | tg-signer --workdir "${workdir}" import "${task_name}"
+              printf '%s\n' "${task_name}" >> "${tasks_file}"
+            done < "${RUNNER_TEMP}/legacy-tasks.tsv"
+          fi
 
       - name: Run check-in once
         shell: bash
         env:
-          SESSION_STRING: ${{ secrets.TG_SESSION_STRING }}
+          SESSION_STRING: ${{ secrets.TG_SESSION_STRING || secrets.SESSION_STRING }}
           CUSTOM_TG_PROXY: ${{ secrets.TG_PROXY }}
           CUSTOM_TG_API_ID: ${{ secrets.TG_API_ID }}
           CUSTOM_TG_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -93,9 +112,12 @@ jobs:
             export OPENAI_MODEL="${CUSTOM_OPENAI_MODEL}"
           fi
 
-          tg-signer \
-            --log-level info \
-            --session_dir "${RUNNER_TEMP}" \
-            --workdir "${RUNNER_TEMP}/tg-signer" \
-            --in-memory \
-            run-once github-actions
+          while IFS= read -r task_name; do
+            [[ -n "${task_name}" ]] || continue
+            tg-signer \
+              --log-level info \
+              --session_dir "${RUNNER_TEMP}" \
+              --workdir "${RUNNER_TEMP}/tg-signer" \
+              --in-memory \
+              run-once "${task_name}" < /dev/null
+          done < "${RUNNER_TEMP}/tg-signer-tasks.txt"

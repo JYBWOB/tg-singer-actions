@@ -139,6 +139,18 @@ gh secret set TG_SIGNER_CONFIG < sign-config.json
 
 `SIGN_CONFIG_DEMO.json` 展示了原生配置结构。它只用于参考，示例 Chat ID 无法直接签到。一个任务的 `chats` 数组可以配置多个机器人或群组，不再需要旧版 `TASK_MAP` 外层包装。
 
+## 从旧版 Secrets 迁移
+
+工作流会优先读取新的 `TG_SESSION_STRING` 和 `TG_SIGNER_CONFIG`。为了让已有 Fork 平滑迁移，它也暂时兼容旧名称 `SESSION_STRING` 和旧版 `TASK_MAP`，并在运行时把旧任务逐个导入 `tg-signer 0.9.1`。
+
+已有用户可以先保持旧 Secrets 继续签到，再运行：
+
+```bash
+bash scripts/setup.sh
+```
+
+脚本上传新的两个 Secrets 后，工作流会自动切换到原生单任务配置。确认新配置运行成功后，可以删除旧的 `SESSION_STRING` 和 `TASK_MAP` Secrets。
+
 ## 更新签到配置
 
 重新运行辅助脚本即可覆盖配置：
@@ -172,7 +184,7 @@ GitHub 可能停用长期没有仓库活动的公共仓库定时工作流。`.gi
 
 ### 提示缺少 Secret
 
-确认 Secret 名称严格为 `TG_SESSION_STRING` 和 `TG_SIGNER_CONFIG`。Fork 不会复制上游仓库的 Secrets。
+新用户应确认 Secret 名称严格为 `TG_SESSION_STRING` 和 `TG_SIGNER_CONFIG`。已有用户仍可使用迁移兼容的 `SESSION_STRING` 和 `TASK_MAP`。Fork 不会复制上游仓库的任何 Secrets。
 
 ### Session 失效
 
