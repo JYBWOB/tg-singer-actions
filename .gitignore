@@ -1,0 +1,12 @@
+# tg-signer may create these when commands are run manually in the repository.
+.signer/
+logs/
+*.session
+*.session-journal
+*.session_string
+sign-config.json
+
+# Local Python environments
+.venv/
+venv/
+__pycache__/

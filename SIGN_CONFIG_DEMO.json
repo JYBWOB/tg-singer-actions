@@ -1,0 +1,23 @@
+{
+  "chats": [
+    {
+      "chat_id": 123456789,
+      "message_thread_id": null,
+      "name": "示例签到机器人",
+      "delete_after": null,
+      "actions": [
+        {
+          "action": 1,
+          "text": "/start"
+        },
+        {
+          "action": 3,
+          "text": "签到"
+        }
+      ]
+    }
+  ],
+  "sign_at": "10:30:00",
+  "random_seconds": 0,
+  "sign_interval": 5
+}

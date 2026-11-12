@@ -1,44 +1,101 @@
+name: Telegram automatic check-in
+
 on:
   schedule:
-    - cron: '30 02 * * *'
+    # GitHub cron uses UTC. 02:30 UTC is 10:30 in Asia/Shanghai.
+    # Edit only this line to change the automatic run time.
+    - cron: "30 2 * * *"
   workflow_dispatch:
+
 permissions:
-  actions: write
-  contents: write
+  contents: read
+
+concurrency:
+  group: tg-signer-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
-  sign-job:
-    name: sign-job-name
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
+  sign-in:
+    name: Run tg-signer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TG_SIGNER_VERSION: "0.9.1"
+      TZ: ${{ vars.TZ || 'Asia/Shanghai' }}
+
     steps:
-    - uses: actions/setup-python@v6
-      with:
-        python-version: '3.13'
-    - name: install tg-signer
-      run: |
-        pip3 install tg-signer
-    - name: sign
-      env:
-        SESSION_STRING: ${{ secrets.SESSION_STRING }}
-        TASK_MAP: ${{ secrets.TASK_MAP }}
-      run: |
-        echo "$TASK_MAP" | jq -r 'to_entries[] | "\(.key)\t\(.value | tojson)"' | while IFS=$'\t' read -r key value_json; do
-            task_path=".signer/signs/${key}"
-            mkdir -p ${task_path}
-            config_name="${task_path}/config.json"
-            echo "$value_json" | jq . > "$config_name"
-            # 避免隐私信息输出，若想输出日志则删除 `> /dev/null 2>&1`
-            tg-signer --session-string "$SESSION_STRING" run-once ${key} > /dev/null 2>&1
-        done
-    - name: 拉取代码
-      uses: actions/checkout@v4
-      with:
-        persist-credentials: true
-        fetch-depth: 0
-    - name: 自动续命Actions(防止60天禁用action)
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git commit --allow-empty -m "auto keep actions alive (no code change)"
-        git push origin main
+      - name: Validate required secrets
+        shell: bash
+        env:
+          SESSION_STRING: ${{ secrets.TG_SESSION_STRING }}
+          SIGNER_CONFIG: ${{ secrets.TG_SIGNER_CONFIG }}
+        run: |
+          if [[ -z "${SESSION_STRING}" ]]; then
+            echo "::error::Missing repository secret: TG_SESSION_STRING"
+            exit 1
+          fi
+          if [[ -z "${SIGNER_CONFIG}" ]]; then
+            echo "::error::Missing repository secret: TG_SIGNER_CONFIG"
+            exit 1
+          fi
+          python3 -c 'import json, os; value = json.loads(os.environ["SIGNER_CONFIG"]); assert isinstance(value, dict), "TG_SIGNER_CONFIG must be a JSON object"'
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Install tg-signer
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check "tg-signer==${TG_SIGNER_VERSION}"
+          tg-signer version
+
+      - name: Import configuration
+        shell: bash
+        env:
+          SIGNER_CONFIG: ${{ secrets.TG_SIGNER_CONFIG }}
+        run: |
+          workdir="${RUNNER_TEMP}/tg-signer"
+          mkdir -p "${workdir}"
+          printf '%s' "${SIGNER_CONFIG}" \
+            | tg-signer --workdir "${workdir}" import github-actions
+
+      - name: Run check-in once
+        shell: bash
+        env:
+          SESSION_STRING: ${{ secrets.TG_SESSION_STRING }}
+          CUSTOM_TG_PROXY: ${{ secrets.TG_PROXY }}
+          CUSTOM_TG_API_ID: ${{ secrets.TG_API_ID }}
+          CUSTOM_TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          CUSTOM_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CUSTOM_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          CUSTOM_OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+        run: |
+          export TG_SESSION_STRING="${SESSION_STRING}"
+
+          if [[ -n "${CUSTOM_TG_PROXY}" ]]; then
+            export TG_PROXY="${CUSTOM_TG_PROXY}"
+          fi
+          if [[ -n "${CUSTOM_TG_API_ID}" ]]; then
+            export TG_API_ID="${CUSTOM_TG_API_ID}"
+          fi
+          if [[ -n "${CUSTOM_TG_API_HASH}" ]]; then
+            export TG_API_HASH="${CUSTOM_TG_API_HASH}"
+          fi
+          if [[ -n "${CUSTOM_OPENAI_API_KEY}" ]]; then
+            export OPENAI_API_KEY="${CUSTOM_OPENAI_API_KEY}"
+          fi
+          if [[ -n "${CUSTOM_OPENAI_BASE_URL}" ]]; then
+            export OPENAI_BASE_URL="${CUSTOM_OPENAI_BASE_URL}"
+          fi
+          if [[ -n "${CUSTOM_OPENAI_MODEL}" ]]; then
+            export OPENAI_MODEL="${CUSTOM_OPENAI_MODEL}"
+          fi
+
+          tg-signer \
+            --log-level info \
+            --session_dir "${RUNNER_TEMP}" \
+            --workdir "${RUNNER_TEMP}/tg-signer" \
+            --in-memory \
+            run-once github-actions

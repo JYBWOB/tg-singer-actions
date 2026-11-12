@@ -1,0 +1,52 @@
+name: Keep scheduled workflows active
+
+on:
+  schedule:
+    # Run twice a month so one transient failure does not consume most of
+    # GitHub's inactivity window for scheduled workflows in public forks.
+    - cron: "17 3 1,15 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keepalive-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: Create activity commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Create and push an empty commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3; do
+            git fetch origin "${DEFAULT_BRANCH}"
+            git checkout -B "${DEFAULT_BRANCH}" "origin/${DEFAULT_BRANCH}"
+            git commit --allow-empty -m "chore: keep scheduled workflows active"
+
+            if git push origin "HEAD:${DEFAULT_BRANCH}"; then
+              exit 0
+            fi
+
+            echo "Push attempt ${attempt} failed; retrying against the latest branch."
+            sleep "$((attempt * 5))"
+          done
+
+          echo "::error::Unable to push the keepalive commit after three attempts"
+          exit 1
