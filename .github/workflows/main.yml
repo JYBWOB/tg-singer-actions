@@ -112,6 +112,7 @@ jobs:
             export OPENAI_MODEL="${CUSTOM_OPENAI_MODEL}"
           fi
 
+          tasks_file="${RUNNER_TEMP}/tg-signer-tasks.txt"
           private_log="${RUNNER_TEMP}/tg-signer-private.log"
           umask 077
           chmod 600 "${tasks_file}"
