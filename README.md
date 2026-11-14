@@ -112,7 +112,7 @@ gh workflow run main.yml
 gh run watch
 ```
 
-Action 日志会保留 `tg-signer` 的正常输出和错误信息，便于排查 Chat ID、按钮文本、Session 失效或 Telegram 限流问题。
+`Run check-in once` 会隐藏 `tg-signer` 的标准输出和错误输出，因为其中可能包含最近对话、群组名称、用户名或消息内容。工作流只显示成功或失败状态。需要排查 Chat ID、按钮文本、Session 失效或 Telegram 限流问题时，请在可信的本地环境运行 `tg-signer`；不要把含有 Telegram 信息的完整日志粘贴到公开 Issue。
 
 ## 手动生成配置
 

@@ -112,12 +112,22 @@ jobs:
             export OPENAI_MODEL="${CUSTOM_OPENAI_MODEL}"
           fi
 
+          private_log="${RUNNER_TEMP}/tg-signer-private.log"
+          umask 077
+          chmod 600 "${tasks_file}"
+          trap 'rm -f "${private_log}"' EXIT
+
           while IFS= read -r task_name; do
             [[ -n "${task_name}" ]] || continue
-            tg-signer \
+            if ! tg-signer \
               --log-level info \
               --session_dir "${RUNNER_TEMP}" \
               --workdir "${RUNNER_TEMP}/tg-signer" \
               --in-memory \
-              run-once "${task_name}" < /dev/null
-          done < "${RUNNER_TEMP}/tg-signer-tasks.txt"
+              run-once "${task_name}" < /dev/null >> "${private_log}" 2>&1; then
+              echo "::error::tg-signer failed. Its output was suppressed because it may contain private Telegram chat information."
+              exit 1
+            fi
+          done < "${tasks_file}"
+
+          echo "tg-signer completed successfully. Its output was suppressed to protect private Telegram chat information."
