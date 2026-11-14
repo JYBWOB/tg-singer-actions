@@ -2,7 +2,7 @@
 
 通过 GitHub Actions 和 [`tg-signer`](https://github.com/amchii/tg-signer) 自动完成 Telegram 机器人签到。
 
-当前工作流固定使用 `tg-signer 0.9.1`，避免上游发布新版本后未经验证地改变运行结果。
+当前工作流固定使用 `tg-signer 0.9.2`，避免上游发布新版本后未经验证地改变运行结果。
 
 ## 工作方式
 
@@ -31,6 +31,7 @@ Fork 不会继承本仓库的 Secrets。GitHub 通常也会暂停 Fork 中的工
 
 - Python 3.10 或更高版本
 - 可以接收 Telegram 登录验证码的账号
+- 可选：Telegram 代理地址，例如 `socks5://127.0.0.1:7890`
 - 可选：已安装并登录 [GitHub CLI](https://cli.github.com/)，用于自动上传 Secrets 和触发测试
 
 运行：
@@ -39,14 +40,24 @@ Fork 不会继承本仓库的 Secrets。GitHub 通常也会暂停 Fork 中的工
 bash scripts/setup.sh
 ```
 
+脚本会在登录前询问可选的代理地址。也可以通过环境变量预先提供，脚本不会显示地址：
+
+```bash
+TG_PROXY='socks5://127.0.0.1:7890' bash scripts/setup.sh
+```
+
+该代理会用于脚本内的所有 `tg-signer` 命令。`tg-signer` 不会自动读取操作系统的代理设置。
+
 脚本会：
 
 1. 在 `~/.local/share/tg-singer-actions` 创建隔离的 Python 环境；
-2. 安装 `tg-signer 0.9.1`；
+2. 安装 `tg-signer 0.9.2`；
 3. 交互登录 Telegram，并列出最近对话和 Chat ID；
 4. 调用 `tg-signer reconfig github-actions` 交互生成签到配置；
 5. 导出标准的 `tg-signer` JSON 配置；
-6. 如果 GitHub CLI 已登录，询问是否上传两个 Secrets、启用工作流并立即测试。
+6. 如果 GitHub CLI 已登录，询问是否上传两个必需 Secrets、启用工作流并立即测试；配置了代理时，还可选择上传 `TG_PROXY` Secret。
+
+本机的 `127.0.0.1` 或 `localhost` 代理无法从 GitHub runner 访问，因此脚本不会默认上传代理。只有代理地址可从公网 runner 访问时，才应确认上传。
 
 如果脚本无法识别目标仓库，可以显式指定：
 
@@ -110,8 +121,10 @@ Action 日志会保留 `tg-signer` 的正常输出和错误信息，便于排查
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install "tg-signer==0.9.1"
+python -m pip install "tg-signer[speedup]==0.9.2"
 
+# 如需代理，必须显式设置；tg-signer 不读取系统代理。
+export TG_PROXY='socks5://127.0.0.1:7890'
 tg-signer --in-memory login
 tg-signer reconfig github-actions
 tg-signer export --file sign-config.json github-actions
@@ -141,7 +154,7 @@ gh secret set TG_SIGNER_CONFIG < sign-config.json
 
 ## 从旧版 Secrets 迁移
 
-工作流会优先读取新的 `TG_SESSION_STRING` 和 `TG_SIGNER_CONFIG`。为了让已有 Fork 平滑迁移，它也暂时兼容旧名称 `SESSION_STRING` 和旧版 `TASK_MAP`，并在运行时把旧任务逐个导入 `tg-signer 0.9.1`。
+工作流会优先读取新的 `TG_SESSION_STRING` 和 `TG_SIGNER_CONFIG`。为了让已有 Fork 平滑迁移，它也暂时兼容旧名称 `SESSION_STRING` 和旧版 `TASK_MAP`，并在运行时把旧任务逐个导入 `tg-signer 0.9.2`。
 
 已有用户可以先保持旧 Secrets 继续签到，再运行：
 
@@ -216,7 +229,7 @@ GitHub 不保证 schedule 准点运行，繁忙时可能延迟。确认 cron 使
 
 ## 上游文档
 
-- [`tg-signer` 0.9.1 发布页](https://github.com/amchii/tg-signer/releases/tag/0.9.1)
+- [`tg-signer` 0.9.2 发布页](https://github.com/amchii/tg-signer/releases/tag/0.9.2)
 - [`tg-signer` 使用说明](https://github.com/amchii/tg-signer#readme)
 - [GitHub Actions schedule 文档](https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#schedule)
 - [GitHub Actions Secrets 文档](https://docs.github.com/actions/security-guides/using-secrets-in-github-actions)
